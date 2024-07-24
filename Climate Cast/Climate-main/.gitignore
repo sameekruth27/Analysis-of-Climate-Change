@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+/.quarto/
+index_cache/
+_freeze/
+output/
+
+pages/**
+!pages/**.qmd

@@ -1,0 +1,7 @@
+---
+title: "Climate"
+---
+
+```{r}
+print("Climate")
+```

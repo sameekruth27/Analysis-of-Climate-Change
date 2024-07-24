@@ -1,0 +1,212 @@
+---
+title: Models
+---
+
+## AutoRegressive Integrated Moving Average (ARIMA)
+
+```{r}
+library(dplyr)
+library(forecast)
+
+data <- read.csv("data/tidy/merged.csv", header = TRUE)
+
+iso3_country <- "IND"
+selected_data <- data %>%
+  filter(iso3 == iso3_country)
+
+str(selected_data)
+
+selected_data$year <- as.Date(as.character(selected_data$year), format = "%Y")
+
+ts_data <- ts(
+  selected_data$air_quality_in_mg_per_m3,
+  frequency = 1, start = min(selected_data$year)
+)
+
+str(ts_data)
+
+arima_model <- auto.arima(ts_data)
+
+summary(arima_model)
+
+future_years <- seq(
+  max(selected_data$year) + 1, max(selected_data$year) + 5,
+  by = "years"
+)
+forecast_values <- forecast(arima_model, h = length(future_years))
+
+print(forecast_values)
+```
+
+## Vector Autoregression (VAR)
+
+```{r}
+library(vars)
+library(dplyr)
+
+data <- read.csv("data/tidy/merged.csv", header = TRUE)
+
+iso3_country <- "IND"
+selected_data <- data %>%
+  filter(iso3 == iso3_country)
+
+str(selected_data)
+
+ts_data1 <- ts(
+  selected_data$forest_area_in_1000_ha,
+  start = 2000, end = 2020
+)
+ts_data2 <- ts(
+  selected_data$carbon_stocks_in_millions_tonnes,
+  start = 2000, end = 2020
+)
+ts_matrix <- cbind(ts_data1, ts_data2)
+var_model <- VAR(ts_matrix, p = 2, type = "trend")
+
+forecast <- predict(var_model, n.ahead = 5)
+print(forecast)
+```
+
+## Long Short-Term Memory (LSTM)
+
+```{r}
+library(dplyr)
+library(keras)
+
+data <- read.csv("data/tidy/merged.csv", header = TRUE)
+iso3_country <- "IND"
+selected_data <- data %>%
+  filter(iso3 == iso3_country)
+
+ts_data <- ts(
+  selected_data$mean_global_surface_temp_in_celsius,
+  start = 2000, end = 2020
+)
+
+max_val <- max(ts_data)
+min_val <- min(ts_data)
+scaled_data <- (ts_data - min_val) / (max_val - min_val)
+
+prepare_lstm_data <- function(data, look_back) {
+  x <- matrix(0, nrow = length(data) - look_back, ncol = look_back)
+  y <- numeric(length(data) - look_back)
+  for (i in 1:(length(data) - look_back)) {
+    end_ix <- i + look_back - 1
+    x[i, ] <- data[i:end_ix]
+    y[i] <- data[end_ix + 1]
+  }
+  return(list(x, y))
+}
+
+look_back <- 3
+n_features <- 1
+
+train_data <- prepare_lstm_data(scaled_data, look_back)
+x_train <- array(
+  train_data[[1]],
+  dim = c(dim(train_data[[1]])[1], dim(train_data[[1]])[2], n_features)
+)
+y_train <- train_data[[2]]
+
+model <- keras_model_sequential()
+model %>%
+  layer_lstm(units = 50, input_shape = c(look_back, n_features)) %>%
+  layer_dense(units = 1)
+
+model %>% compile(
+  loss = "mean_squared_error",
+  optimizer = optimizer_adam()
+)
+
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 100,
+  batch_size = 1,
+  verbose = 2
+)
+
+forecast_lstm <- function(model, data, look_back, n_features) {
+  forecast <- numeric(length(data))
+  for (i in 1:(length(data) - look_back)) {
+    input_data <- data[i:(i + look_back - 1)]
+    input_data <- array(input_data, dim = c(1, look_back, n_features))
+    forecast[i + look_back] <- model %>% predict(input_data)
+  }
+  return(forecast)
+}
+
+scaled_forecast <- forecast_lstm(model, scaled_data, look_back, n_features)
+forecast <- scaled_forecast * (max_val - min_val) + min_val
+print(forecast)
+
+calculate_mse <- function(actual, forecast) {
+  mse <- mean((actual - forecast)^2)
+  return(mse)
+}
+
+mse <- calculate_mse(ts_data[0:length(ts_data)], forecast)
+print(paste("Mean Squared Error (MSE):", mse))
+```
+
+## Comparison between linear, ETS and ARIMA models
+
+```{r}
+library(dplyr)
+library(forecast)
+
+data <- read.csv("data/tidy/merged.csv", header = TRUE)
+
+iso3_country <- "AGO"
+selected_data <- data %>%
+  filter(iso3 == iso3_country)
+
+selected_data$year <- as.Date(as.character(selected_data$year), format = "%Y")
+
+ts_data <- ts(
+  selected_data$air_quality_in_mg_per_m3,
+  frequency = 1, start = min(selected_data$year)
+)
+
+linear_model <- lm(air_quality_in_mg_per_m3 ~ year, data = selected_data)
+arima_model <- auto.arima(ts_data)
+ets_model <- ets(ts_data)
+
+future_years <- seq(
+  max(selected_data$year) + 1, max(selected_data$year) + 5,
+  by = "years"
+)
+
+linear_forecast <- predict(
+  linear_model,
+  newdata = data.frame(year = future_years)
+)
+forecast_arima <- forecast(arima_model, h = length(future_years))
+forecast_ets <- forecast(ets_model, h = length(future_years))
+
+comparison <- data.frame(
+  Year = future_years,
+  Linear = linear_forecast,
+  ARIMA = forecast_arima$mean,
+  ETS = forecast_ets$mean
+)
+print(comparison)
+
+comparison$Linear_Error <- abs(
+  comparison$Linear - mean(selected_data$air_quality_in_mg_per_m3)
+)
+comparison$ARIMA_Error <- abs(
+  comparison$ARIMA - mean(selected_data$air_quality_in_mg_per_m3)
+)
+comparison$ETS_Error <- abs(
+  comparison$ETS - mean(selected_data$air_quality_in_mg_per_m3)
+)
+mean_abs_error <- comparison %>%
+  group_by(Year) %>%
+  summarize(
+    Linear_MAE = mean(Linear_Error),
+    ARIMA_MAE = mean(ARIMA_Error),
+    ETS_MAE = mean(ETS_Error)
+  )
+
+print(mean_abs_error)
+```

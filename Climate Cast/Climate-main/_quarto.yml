@@ -1,0 +1,49 @@
+project:
+  type: website
+  output-dir: output
+  execute-dir: project
+  preview:
+      host: "0.0.0.0"
+      port: 4200
+      browser: false
+website:
+  title: Website
+  page-navigation: true
+  back-to-top-navigation: true
+  navbar:
+    background: "#282A36"
+  sidebar:
+    style: floating
+    background: "#F8F8F2"
+    foreground: "#282A36"
+    alignment: center
+    contents: pages/**
+format:
+  html:
+    toc: true
+    toc-title: Table of contents
+    css: styles.css
+    highlight-style: dracula
+    code-block-bg: "#282A36"
+    code-block-border-left: "#F1FA8C"
+    backgroundcolor: "#F8F8F2"
+    fontcolor: "#282A36"
+    linkcolor: "#BD93F9"
+    fontsize: 18px
+    linestretch: 1.5
+    code-line-numbers: true
+    code-overflow: scroll
+    code-fold: show
+    code-summary: Show/Hide code
+    code-tools:
+      source: false
+      toggle: true
+
+
+execute:
+  warning: false
+  freeze: auto
+  cache: true
+
+editor:
+  render-on-save: true

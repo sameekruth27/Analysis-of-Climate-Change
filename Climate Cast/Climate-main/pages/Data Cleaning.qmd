@@ -1,0 +1,192 @@
+---
+title: Data Cleaning
+---
+
+```{r, results=FALSE}
+library(tidyverse, quietly = TRUE)
+library(janitor)
+library(readr)
+library(readxl)
+library(zoo, quietly = TRUE)
+```
+
+## Air Quality Dataset
+
+```{r}
+air_quality <- read.csv('data/Air Quality.csv')
+head(air_quality)
+```
+```{r}
+same_value_columns <-
+    apply(air_quality, 2, function(x)
+        length(unique(x)) == 1)
+same_value_column_names <- names(air_quality)[same_value_columns]
+print(same_value_column_names)
+air_quality <- air_quality[!same_value_columns]
+```
+
+```{r}
+air_quality <- air_quality |>
+    rename(iso3 = 'COU', air_quality = 'Value') |>
+    select(-c("Flag.Codes","YEA","Flags"))|>
+    clean_names()
+head(air_quality)
+```
+
+```{r}
+air_quality <- air_quality[order(air_quality$iso3),]
+write_csv(air_quality, file = 'data/tidy/air_quality.csv')
+```
+
+## Annual Mean Global Surface Temp
+
+```{r}
+annual_mean_global_surface_temp <-
+    read_delim(
+        "~/Documents/Climate/data/Annual Mean Global Surface Temp.csv",
+        show_col_types = FALSE
+    )
+head(annual_mean_global_surface_temp)
+```
+
+```{r}
+same_value_columns <-
+    apply(annual_mean_global_surface_temp, 2, function(x)
+        length(unique(x)) == 1)
+same_value_column_names <- names(annual_mean_global_surface_temp)[same_value_columns]
+print(same_value_column_names)
+annual_mean_global_surface_temp <- annual_mean_global_surface_temp[!same_value_columns]
+```
+
+
+```{r}
+annual_mean_global_surface_temp <- annual_mean_global_surface_temp |>
+    pivot_longer(cols = matches('^\\d{4}$'),
+                 names_to = 'year',
+                 values_to = "mean_global_surface_temp") |>
+    select(-'ObjectId') |>
+    clean_names()
+head(annual_mean_global_surface_temp)
+```
+
+```{r}
+annual_mean_global_surface_temp <-
+    annual_mean_global_surface_temp[order(annual_mean_global_surface_temp$iso3),]
+write_csv(annual_mean_global_surface_temp, file = 'data/tidy/annual_mean_global_surface_temp.csv')
+```
+
+## CO2 Concentration
+
+```{r}
+carbon_dioxide_concentration <-
+    read_csv("~/Documents/Climate/data/Carbon Dioxide Concentration.csv",
+             show_col_types = FALSE)
+head(carbon_dioxide_concentration)
+```
+
+```{r}
+carbon_dioxide_concentration <- carbon_dioxide_concentration |>
+    rename(iso3 = 'Code',
+           country = 'Entity',
+           co2_emissions = 'Annual CO₂ emissions') |>
+    clean_names()
+head(carbon_dioxide_concentration)
+```
+
+```{r}
+carbon_dioxide_concentration <-
+    carbon_dioxide_concentration[order(carbon_dioxide_concentration$iso3),]
+write_csv(carbon_dioxide_concentration, file = 'data/tidy/carbon_dioxide_concentration.csv')
+```
+
+## Annual Greenhouse Gas Emission
+
+```{r}
+annual_greenhouse_gas_emission <-
+    read_excel("~/Documents/Climate/data/Annual Greenhouse Gas Emission.xlsx",
+               sheet = "GHG_totals_by_country")
+```
+
+```{r}
+annual_greenhouse_gas_emission <- annual_greenhouse_gas_emission |>
+    rename(iso3 = 'EDGAR Country Code',)|>
+    pivot_longer(cols = matches('^\\d{4}$'),
+                 names_to = 'year',
+                 values_to = "ghg_emissions") |>
+    clean_names()
+```
+
+```{r}
+annual_greenhouse_gas_emission <-
+    annual_greenhouse_gas_emission[order(annual_greenhouse_gas_emission$iso3),]
+write_csv(annual_greenhouse_gas_emission, file = 'data/tidy/annual_greenhouse_gas_emission.csv')
+```
+
+## Merging all the datasets
+
+```{r}
+forestarea <- read_csv("data/tidy/forestarea.csv")
+carbonstocks <- read_csv("data/tidy/carbonstocks.csv")
+landarea <- read_csv("data/tidy/landarea.csv")
+air_quality <- read_csv("data/tidy/air_quality.csv")
+annual_greenhouse_gas_emission <-
+    read_csv("data/tidy/annual_greenhouse_gas_emission.csv")
+carbon_dioxide_concentration <-
+    read_csv("data/tidy/carbon_dioxide_concentration.csv")
+disaster_frequency <-
+    read_csv("data/tidy/disaster_frequency.csv")
+annual_mean_global_surface_temp <-
+    read_csv("data/tidy/annual_mean_global_surface_temp.csv")
+
+merged_data <-
+    merge(landarea,
+          forestarea,
+          by = c("iso3", "year"),
+          all = FALSE) |>
+    select(-c("country.y")) |>
+    rename("country" = "country.x") |>
+    merge(carbonstocks, by = c("iso3", "year"), all = FALSE) |>
+    select(-c("country.y")) |>
+    rename("country" = "country.x") |>
+    merge(air_quality, by = c("iso3", "year"), all = FALSE) |>
+    select(-c("country.y")) |>
+    rename("country" = "country.x") |>
+    merge(annual_greenhouse_gas_emission,
+          by = c("iso3", "year"),
+          all = FALSE) |>
+    select(-c("country.y")) |>
+    rename("country" = "country.x") |>
+    merge(carbon_dioxide_concentration,
+          by = c("iso3", "year"),
+          all = FALSE) |>
+    select(-c("country.y")) |>
+    rename("country" = "country.x") |>
+    merge(disaster_frequency,
+          by = c("iso3", "year"),
+          all = FALSE) |>
+    select(-c("country.y")) |>
+    rename("country" = "country.x") |>
+    merge(annual_mean_global_surface_temp,
+          by = c("iso3", "year"),
+          all = FALSE) |>
+    select(-c("country.y", "iso2.y", "x5", "x6", "indicator")) |>
+    rename(
+        "country" = "country.x",
+        "iso2" = "iso2.x",
+        "land_area (in 1000 HA)" = "landarea",
+        "forest_area (in 1000 HA)" = "forest_area",
+        "carbon_stocks (in millions tonnes)" = "carbonstock",
+        "air_quality (in  µg per m3)" = "air_quality",
+        "ghg_emissions (in million metric tonnes of CO2 equivalents per yr)" = "ghg_emissions",
+        "co2_emissions (in tonnes)" = "co2_emissions",
+        "disaster_count (in Number of)" = "disaster_count",
+        "mean_global_surface_temp (in celsius)" = "mean_global_surface_temp"
+    ) |>
+    select('iso2', 'iso3', 'country', 'year', everything()) |>
+    filter(year > 1999) |>
+    clean_names()
+
+merged_data$mean_global_surface_temp_in_celsius<-na.approx(merged_data$mean_global_surface_temp_in_celsius)
+write_csv(merged_data, file = "data/tidy/merged.csv")
+```
+
